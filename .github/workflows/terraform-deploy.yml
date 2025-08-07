@@ -1,0 +1,39 @@
+name: Deploy Job Portal Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v3
+      with:
+        role-to-assume: arn:aws:iam::804540873274:role/github-actions-role
+        aws-region: us-west-2
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push Docker image
+      run: |
+        docker build -t ${{ steps.login-ecr.outputs.registry }}/stenny-job-portal:${{ github.sha }} .
+        docker push ${{ steps.login-ecr.outputs.registry }}/stenny-job-portal:${{ github.sha }}
+
+    - name: Update deployment image in EKS
+      run: |
+        kubectl set image deployment/job-portal-backend \
+          job-portal-backend=${{ steps.login-ecr.outputs.registry }}/stenny-job-portal:${{ github.sha }} \
+          -n openings
